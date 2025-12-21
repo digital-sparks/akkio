@@ -1,7 +1,7 @@
 // import { gsap } from 'gsap';
 // import { Observer } from 'gsap/Observer';
 // import { SplitText } from 'gsap/SplitText';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
+// import { ScrollTrigger } from 'gsap/ScrollTrigger';
 // gsap.registerPlugin(Observer, SplitText, ScrollTrigger);
 
 import Swiper from 'swiper';
@@ -17,30 +17,6 @@ import {
 
 window.Webflow ||= [];
 window.Webflow.push(() => {
-  // document.querySelectorAll('[data-anim~="container"]').forEach((container) => {
-  //   console.log(container);
-
-  //   gsap.set(container, {
-  //     marginLeft: '1rem',
-  //     marginRight: '1rem',
-  //     width: 'calc(100% - 2rem)',
-  //   });
-
-  //   gsap.to(container, {
-  //     marginLeft: '.5rem',
-  //     marginRight: '.5rem',
-  //     width: 'calc(100% - 1rem)',
-  //     ease: 'power2.inOut',
-  //     duration: 1,
-  //     scrollTrigger: {
-  //       trigger: container,
-  //       start: '25% bottom',
-  //       end: 'center top',
-  //       // markers: true,
-  //     },
-  //   });
-  // });
-
   // -----------------------------------------------------------
   // SUCCESS STORIES SWIPER //
   // -----------------------------------------------------------
@@ -67,19 +43,47 @@ window.Webflow.push(() => {
   });
 
   // -----------------------------------------------------------
+  // PLAY MOBILE VIDEOS
+  // -----------------------------------------------------------
+  let mm = gsap.matchMedia();
+  mm.add('(max-width: 767px)', () => {
+    const videosMobile = [];
+    document.querySelectorAll('[data-anim-el="video-mobile"]').forEach((videoWrapper) => {
+      const video = videoWrapper.querySelector('video');
+      videosMobile.push(video);
+      ScrollTrigger.create({
+        trigger: videoWrapper,
+        start: 'center bottom',
+        end: '75% top',
+        onEnter: () => video.play(),
+        onLeave: () => video.pause(),
+        onEnterBack: () => video.play(),
+        onLeaveBack: () => video.pause(),
+      });
+    });
+    return () => {
+      videosMobile.forEach((video) => video.pause());
+    };
+  });
+
+  // -----------------------------------------------------------
   // TabRotator: Core functionality handler
   // -----------------------------------------------------------
   function TabRotator(container, options) {
     this.container = container;
     this.tabLinks = container.querySelectorAll('.w-tab-link');
+    this.tabPanes = container.querySelectorAll('.w-tab-pane');
+    this.videos = [];
     this.pauseable = options.pauseable;
     this.defaultSpeed = options.containerSpeed;
     this.currentIndex = 0;
+    this.previousIndex = -1;
     this.timer = null;
     this.isPaused = false;
     this.isHoverPaused = false;
     this.isScrollPaused = true;
-    this.hasStarted = false; // Track if rotation has ever started
+    this.hasStarted = false;
+    this.isTabSwitching = false;
     this.progressLine = null;
     this.progressAnimation = null;
     this.scrollTrigger = null;
@@ -93,18 +97,106 @@ window.Webflow.push(() => {
 
   TabRotator.prototype.init = function () {
     this.initializeProgressLines();
+    this.initializeVideos();
     this.findCurrentIndex();
     this.setupEventListeners();
     this.setupScrollTrigger();
   };
 
+  // -----------------------------------------------------------
+  // VIDEO CONTROL METHODS
+  // -----------------------------------------------------------
+  TabRotator.prototype.initializeVideos = function () {
+    this.videos = [];
+    const tabsComponent = this.container.closest('.w-tabs');
+
+    if (!tabsComponent) {
+      return;
+    }
+
+    const allVideos = tabsComponent.querySelectorAll('video');
+
+    allVideos.forEach((video) => {
+      this.videos.push(video);
+      video.pause();
+      video.currentTime = 0;
+      video.muted = true;
+
+      if (video.readyState >= 2) {
+        video.currentTime = 0;
+      } else {
+        video.addEventListener('loadeddata', () => {
+          video.currentTime = 0;
+        });
+      }
+    });
+  };
+
+  TabRotator.prototype.playCurrentVideo = function (resetToStart = false) {
+    const currentTabPane = this.findCurrentTabPane();
+    if (!currentTabPane) {
+      return;
+    }
+
+    const video = currentTabPane.querySelector('video');
+    if (video) {
+      if (resetToStart) {
+        video.currentTime = 0;
+      }
+
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // Silently handle autoplay failures
+        });
+      }
+    }
+  };
+
+  TabRotator.prototype.pauseAllVideos = function () {
+    this.videos.forEach((video) => {
+      video.pause();
+    });
+  };
+
+  TabRotator.prototype.resetAllVideos = function () {
+    this.videos.forEach((video) => {
+      video.pause();
+      video.currentTime = 0;
+    });
+  };
+
+  TabRotator.prototype.findCurrentTabPane = function () {
+    const currentLink = this.tabLinks[this.currentIndex];
+    if (!currentLink) {
+      return null;
+    }
+
+    const href = currentLink.getAttribute('href');
+    if (href && href.startsWith('#')) {
+      const pane = document.querySelector(href);
+      if (pane) return pane;
+    }
+
+    const tabTarget = currentLink.getAttribute('data-w-tab');
+    if (tabTarget) {
+      const pane = this.container.querySelector(`[data-w-tab="${tabTarget}"].w-tab-pane`);
+      if (pane) return pane;
+    }
+
+    return null;
+  };
+
+  // -----------------------------------------------------------
+  // SCROLL TRIGGER AND VIEWPORT CONTROL
+  // -----------------------------------------------------------
   TabRotator.prototype.setupScrollTrigger = function () {
     const self = this;
 
     this.scrollTrigger = ScrollTrigger.create({
       trigger: this.container,
-      start: 'top 75%',
-      end: 'bottom 25%',
+      start: '25% bottom',
+      end: 'center top',
       onEnter: () => {
         self.isScrollPaused = false;
         self.startOrResumeRotation();
@@ -112,6 +204,7 @@ window.Webflow.push(() => {
       onLeave: () => {
         self.isScrollPaused = true;
         self.pause();
+        self.pauseAllVideos();
       },
       onEnterBack: () => {
         self.isScrollPaused = false;
@@ -120,25 +213,19 @@ window.Webflow.push(() => {
       onLeaveBack: () => {
         self.isScrollPaused = true;
         self.pause();
+        self.pauseAllVideos();
       },
       onRefresh: () => {
-        // Force check visibility after ScrollTrigger refreshes
-        setTimeout(() => self.checkInitialVisibility(), 50);
+        self.checkInitialVisibility();
       },
-      // markers: true, // Remove in production
     });
 
-    // Check initial visibility with a delay to ensure everything is ready
-    setTimeout(() => {
-      this.checkInitialVisibility();
-    }, 250);
+    this.checkInitialVisibility();
   };
 
   TabRotator.prototype.checkInitialVisibility = function () {
-    // Use ScrollTrigger's built-in progress to check if in range
     if (this.scrollTrigger) {
       const progress = this.scrollTrigger.progress;
-      // If progress is between 0 and 1, the element is in the active range
       if (progress >= 0 && progress <= 1 && this.scrollTrigger.isActive) {
         this.isScrollPaused = false;
         this.startOrResumeRotation();
@@ -146,23 +233,23 @@ window.Webflow.push(() => {
     }
   };
 
-  // New method that handles both first start and resume
   TabRotator.prototype.startOrResumeRotation = function () {
-    // Don't start if hover paused
     if (this.isHoverPaused) return;
 
     if (!this.hasStarted) {
-      // First time starting
       this.hasStarted = true;
       this.isPaused = false;
+      this.playCurrentVideo(true);
       this.startRotation();
     } else if (this.isPaused) {
-      // Resume existing rotation
+      this.playCurrentVideo(false);
       this.resume();
     }
-    // If already running and not paused, do nothing
   };
 
+  // -----------------------------------------------------------
+  // PROGRESS LINE CONTROL
+  // -----------------------------------------------------------
   TabRotator.prototype.initializeProgressLines = function () {
     const allProgressLines = this.container.querySelectorAll('[brix-progress-line]');
     allProgressLines.forEach((line) => {
@@ -170,122 +257,6 @@ window.Webflow.push(() => {
       line.style.width = '0%';
       line.offsetHeight;
     });
-  };
-
-  TabRotator.prototype.findCurrentIndex = function () {
-    let foundActive = false;
-    for (let i = 0; i < this.tabLinks.length; i++) {
-      if (this.tabLinks[i].classList.contains('w--current')) {
-        this.currentIndex = i;
-        foundActive = true;
-        break;
-      }
-    }
-    if (!foundActive && this.tabLinks[0]) {
-      this.currentIndex = 0;
-      this.simulateClick(this.tabLinks[0]);
-    }
-  };
-
-  TabRotator.prototype.findCurrentIndexWithRetry = function (maxRetries = 5, currentRetry = 0) {
-    const self = this;
-
-    let foundActive = false;
-    for (let i = 0; i < this.tabLinks.length; i++) {
-      if (this.tabLinks[i].classList.contains('w--current')) {
-        this.currentIndex = i;
-        foundActive = true;
-        break;
-      }
-    }
-
-    if (foundActive || currentRetry >= maxRetries) {
-      this.startRotation();
-      return;
-    }
-
-    setTimeout(() => {
-      self.findCurrentIndexWithRetry(maxRetries, currentRetry + 1);
-    }, 100);
-  };
-
-  TabRotator.prototype.setupEventListeners = function () {
-    const self = this;
-
-    if (this.pauseable) {
-      this.container.addEventListener('mouseenter', () => {
-        self.isHoverPaused = true;
-        if (self.hasStarted) {
-          self.pause();
-        }
-      });
-      this.container.addEventListener('mouseleave', () => {
-        self.isHoverPaused = false;
-        if (!self.isScrollPaused) {
-          self.startOrResumeRotation();
-        }
-      });
-      this.container.addEventListener(
-        'touchstart',
-        () => {
-          self.isHoverPaused = true;
-          if (self.hasStarted) {
-            self.pause();
-          }
-        },
-        { passive: true }
-      );
-      this.container.addEventListener(
-        'touchend',
-        () => {
-          self.isHoverPaused = false;
-          if (!self.isScrollPaused) {
-            self.startOrResumeRotation();
-          }
-        },
-        { passive: true }
-      );
-      this.container.addEventListener(
-        'touchcancel',
-        () => {
-          self.isHoverPaused = false;
-          if (!self.isScrollPaused) {
-            self.startOrResumeRotation();
-          }
-        },
-        { passive: true }
-      );
-    }
-
-    this.tabLinks.forEach((link, index) => {
-      link.addEventListener('click', () => self.resetAfterManualInteraction(index));
-      link.addEventListener('focus', () => self.resetAfterManualInteraction(index));
-    });
-  };
-
-  TabRotator.prototype.resetAfterManualInteraction = function (clickedIndex = null) {
-    if (clickedIndex !== null && clickedIndex === this.currentIndex) {
-      return;
-    }
-
-    clearTimeout(this.timer);
-    this.timer = null;
-    this.resetProgressLine();
-
-    if (clickedIndex !== null) {
-      this.currentIndex = clickedIndex;
-      setTimeout(() => {
-        if (!this.isScrollPaused && !this.isHoverPaused) {
-          this.hasStarted = true;
-          this.isPaused = false;
-          this.startRotation();
-        }
-      }, 300);
-    } else {
-      setTimeout(() => {
-        this.findCurrentIndexWithRetry();
-      }, 300);
-    }
   };
 
   TabRotator.prototype.findProgressLine = function () {
@@ -382,8 +353,148 @@ window.Webflow.push(() => {
     });
   };
 
+  // -----------------------------------------------------------
+  // TAB CONTROL AND ROTATION
+  // -----------------------------------------------------------
+  TabRotator.prototype.findCurrentIndex = function () {
+    this.previousIndex = this.currentIndex;
+
+    let foundActive = false;
+    for (let i = 0; i < this.tabLinks.length; i++) {
+      if (this.tabLinks[i].classList.contains('w--current')) {
+        this.currentIndex = i;
+        foundActive = true;
+        break;
+      }
+    }
+
+    if (!foundActive && this.tabLinks[0]) {
+      this.currentIndex = 0;
+      this.simulateClick(this.tabLinks[0]);
+    }
+
+    if (this.previousIndex !== this.currentIndex && this.previousIndex !== -1 && this.hasStarted) {
+      setTimeout(() => {
+        this.resetAllVideos();
+      }, 0);
+    }
+  };
+
+  TabRotator.prototype.findCurrentIndexWithRetry = function (maxRetries = 5, currentRetry = 0) {
+    const self = this;
+
+    let foundActive = false;
+    for (let i = 0; i < this.tabLinks.length; i++) {
+      if (this.tabLinks[i].classList.contains('w--current')) {
+        this.currentIndex = i;
+        foundActive = true;
+        break;
+      }
+    }
+
+    if (foundActive || currentRetry >= maxRetries) {
+      this.startRotation();
+      return;
+    }
+
+    setTimeout(() => {
+      self.findCurrentIndexWithRetry(maxRetries, currentRetry + 1);
+    }, 0);
+  };
+
+  TabRotator.prototype.setupEventListeners = function () {
+    const self = this;
+
+    if (this.pauseable) {
+      this.container.addEventListener('mouseenter', () => {
+        self.isHoverPaused = true;
+        if (self.hasStarted) {
+          self.pause();
+        }
+      });
+      this.container.addEventListener('mouseleave', () => {
+        self.isHoverPaused = false;
+        if (!self.isScrollPaused) {
+          self.startOrResumeRotation();
+        }
+      });
+      this.container.addEventListener(
+        'touchstart',
+        () => {
+          self.isHoverPaused = true;
+          if (self.hasStarted) {
+            self.pause();
+          }
+        },
+        { passive: true }
+      );
+      this.container.addEventListener(
+        'touchend',
+        () => {
+          self.isHoverPaused = false;
+          if (!self.isScrollPaused) {
+            self.startOrResumeRotation();
+          }
+        },
+        { passive: true }
+      );
+      this.container.addEventListener(
+        'touchcancel',
+        () => {
+          self.isHoverPaused = false;
+          if (!self.isScrollPaused) {
+            self.startOrResumeRotation();
+          }
+        },
+        { passive: true }
+      );
+    }
+
+    this.tabLinks.forEach((link, index) => {
+      link.addEventListener('click', () => self.resetAfterManualInteraction(index));
+      link.addEventListener('focus', () => self.resetAfterManualInteraction(index));
+    });
+  };
+
+  TabRotator.prototype.resetAfterManualInteraction = function (clickedIndex = null) {
+    if (clickedIndex !== null && clickedIndex === this.currentIndex) {
+      return;
+    }
+
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.resetProgressLine();
+    this.isTabSwitching = true;
+
+    if (clickedIndex !== null) {
+      this.previousIndex = this.currentIndex;
+      this.currentIndex = clickedIndex;
+      this.resetAllVideos();
+
+      setTimeout(() => {
+        if (!this.isScrollPaused && !this.isHoverPaused) {
+          this.hasStarted = true;
+          this.isPaused = false;
+          setTimeout(() => {
+            this.playCurrentVideo(true);
+            this.isTabSwitching = false;
+          }, 0);
+          this.startRotation();
+        } else if (!this.isScrollPaused) {
+          setTimeout(() => {
+            this.playCurrentVideo(true);
+            this.isTabSwitching = false;
+          }, 0);
+        }
+      }, 0);
+    } else {
+      setTimeout(() => {
+        this.findCurrentIndexWithRetry();
+      }, 0);
+    }
+  };
+
   TabRotator.prototype.startRotation = function () {
-    // Check all pause conditions
     if (this.isPaused || this.isScrollPaused || this.isHoverPaused) return;
 
     clearTimeout(this.timer);
@@ -405,8 +516,11 @@ window.Webflow.push(() => {
 
       setTimeout(() => {
         this.findCurrentIndex();
+        setTimeout(() => {
+          this.playCurrentVideo(true);
+        }, 0);
         this.startRotation();
-      }, 150);
+      }, 0);
     }, speed);
   };
 
@@ -468,14 +582,17 @@ window.Webflow.push(() => {
 
       setTimeout(() => {
         this.findCurrentIndex();
+        setTimeout(() => {
+          this.playCurrentVideo(true);
+        }, 0);
         this.startRotation();
-      }, 150);
+      }, 0);
     }, remainingTime);
   };
 
-  // Cleanup method
   TabRotator.prototype.destroy = function () {
     clearTimeout(this.timer);
+    this.pauseAllVideos();
     if (this.scrollTrigger) {
       this.scrollTrigger.kill();
     }
@@ -496,7 +613,7 @@ window.Webflow.push(() => {
       }
 
       const defaultSpeedAttr = container.getAttribute('brix-autotabs-default-speed');
-      let containerDefaultSpeed = 8000;
+      let containerDefaultSpeed = 5000;
       if (defaultSpeedAttr) {
         const parsed = parseInt(defaultSpeedAttr, 10);
         if (!isNaN(parsed) && parsed > 0) {
