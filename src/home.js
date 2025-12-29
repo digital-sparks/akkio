@@ -18,6 +18,26 @@ import {
 window.Webflow ||= [];
 window.Webflow.push(() => {
   // -----------------------------------------------------------
+  // WORKFLOW NAV AND FOOTER LINKS //
+  // -----------------------------------------------------------
+  document.querySelectorAll('[data-attr-name="workflow"]').forEach((link) => {
+    const targetSlug = link.getAttribute('data-attr-value');
+    const currentLink = link.getAttribute('href');
+
+    if (!targetSlug || !currentLink) {
+      return;
+    }
+
+    try {
+      const url = new URL(currentLink, window.location.origin);
+      url.searchParams.set('show', targetSlug);
+      link.href = url.toString();
+    } catch (error) {
+      const separator = currentLink.includes('?') ? '&' : '?';
+      link.href = currentLink + separator + 'show=' + targetSlug;
+    }
+  });
+  // -----------------------------------------------------------
   // SUCCESS STORIES SWIPER //
   // -----------------------------------------------------------
   const successCarousel = new Swiper('.success-swiper_wrapper', {

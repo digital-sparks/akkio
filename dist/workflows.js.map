@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../bin/live-reload.js", "../src/workflows.js"],
+  "sourcesContent": ["new EventSource(`${SERVE_ORIGIN}/esbuild`).addEventListener('change', () => location.reload());\n", "window.Webflow ||= [];\nwindow.Webflow.push(() => {\n  const urlParams = new URLSearchParams(window.location.search);\n  const showValue = urlParams.get('show');\n\n  if (showValue) {\n    console.log(showValue);\n    const popupElement = document.querySelector(\n      `[data-attr-name=\"popup\"][data-attr-value=\"${showValue}\"]`\n    );\n\n    if (popupElement) {\n      popupElement.click();\n\n      urlParams.delete('show');\n      const newUrl = urlParams.toString()\n        ? `${window.location.pathname}?${urlParams.toString()}`\n        : window.location.pathname;\n\n      window.history.replaceState({}, '', newUrl);\n    }\n  }\n});\n"],
+  "mappings": ";;AAAA,MAAI,YAAY,GAAG,uBAAY,UAAU,EAAE,iBAAiB,UAAU,MAAM,SAAS,OAAO,CAAC;;;ACA7F,SAAO,YAAY,CAAC;AACpB,SAAO,QAAQ,KAAK,MAAM;AACxB,UAAM,YAAY,IAAI,gBAAgB,OAAO,SAAS,MAAM;AAC5D,UAAM,YAAY,UAAU,IAAI,MAAM;AAEtC,QAAI,WAAW;AACb,cAAQ,IAAI,SAAS;AACrB,YAAM,eAAe,SAAS;AAAA,QAC5B,6CAA6C,SAAS;AAAA,MACxD;AAEA,UAAI,cAAc;AAChB,qBAAa,MAAM;AAEnB,kBAAU,OAAO,MAAM;AACvB,cAAM,SAAS,UAAU,SAAS,IAC9B,GAAG,OAAO,SAAS,QAAQ,IAAI,UAAU,SAAS,CAAC,KACnD,OAAO,SAAS;AAEpB,eAAO,QAAQ,aAAa,CAAC,GAAG,IAAI,MAAM;AAAA,MAC5C;AAAA,IACF;AAAA,EACF,CAAC;",
+  "names": []
+}
